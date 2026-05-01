@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>音取り出来る君 v2.8 - 完成形</title>
+    <title>音取り出来る君 v2.9</title>
     <style>
         body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f4f8; }
         .card { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); max-width: 450px; margin: auto; }
-        #feedback-light { width: 120px; height: 120px; border-radius: 50%; margin: 20px auto; background: #ccc; border: 5px solid white; box-shadow: 0 0 15px rgba(0,0,0,0.1); transition: 0.1s; }
-        #status { font-size: 14px; font-weight: bold; color: #d63384; min-height: 3em; margin: 15px; white-space: pre-wrap; }
+        #feedback-light { width: 120px; height: 120px; border-radius: 50%; margin: 20px auto; background: #ccc; border: 5px solid white; transition: 0.1s; }
+        #status { font-size: 14px; font-weight: bold; color: #d63384; min-height: 4em; margin: 15px; white-space: pre-wrap; }
         button { border: none; padding: 15px; border-radius: 10px; font-weight: bold; cursor: pointer; margin: 5px; font-size: 16px; }
         .btn-orange { background: #fd7e14; color: white; width: 90%; }
         .btn-blue { background: #007bff; color: white; width: 90%; margin-top: 10px; }
@@ -17,9 +17,9 @@
 <body>
 
 <div class="card">
-    <h2>音取り出来る君 <small>v2.8</small></h2>
+    <h2>音取り出来る君 <small>v2.9</small></h2>
     <div id="feedback-light"></div>
-    <div id="status">1. オレンジのボタンを押して開始</div>
+    <div id="status">1. オレンジのボタンを押してね</div>
     
     <button id="startBtn" class="btn-orange">マイクを有効にする</button>
 
@@ -46,7 +46,10 @@
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             await Tone.start();
             
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // ノイズ抑制などをOFFにして、生の音を全部拾う
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true } 
+            });
             const source = audioCtx.createMediaStreamSource(stream);
             analyser = audioCtx.createAnalyser();
             analyser.fftSize = 2048;
@@ -54,7 +57,7 @@
 
             document.getElementById('startBtn').style.display = "none";
             document.getElementById('loadBtn').style.display = "block";
-            document.getElementById('status').innerText = "マイク開通！\n声を出すと「青色」に変わります";
+            document.getElementById('status').innerText = "マイク稼働中！\nマイクに近づいて「あー」と言ってね";
             
             updateLoop();
         } catch (err) {
@@ -76,39 +79,38 @@
         const light = document.getElementById('feedback-light');
         const status = document.getElementById('status');
 
-        if (volume > 0.01) { // 音を検知
+        // 【修正】音量しきい値を極限（0.0001）まで下げました
+        if (volume > 0.0001) { 
             const [pitch, clarity] = Pitchy.findPitch(data, audioCtx.sampleRate);
             
-            if (clarity > 0.5) {
+            // 【修正】明瞭度の基準も下げて、判定を甘くしました
+            if (clarity > 0.3) {
                 const detectedMidi = 12 * (Math.log2(pitch / 440)) + 69;
                 const targetMidi = getTargetMidi();
                 
                 if (targetMidi && Tone.Transport.state === 'started') {
-                    // ここで厳密な判定！
                     const diff = Math.abs(detectedMidi - targetMidi);
-                    if (diff < 1.0) {
-                        light.style.background = "#28a745"; // 緑：合ってる！
-                    } else if (diff < 2.0) {
-                        light.style.background = "#ffc107"; // 黄：惜しい
-                    } else {
-                        light.style.background = "#dc3545"; // 赤：ズレてる
-                    }
-                    status.innerText = `判定中！\n目標音(MIDI): ${targetMidi} / あなたの音: ${Math.round(detectedMidi)}`;
+                    if (diff < 1.0) light.style.background = "#28a745"; 
+                    else if (diff < 2.5) light.style.background = "#ffc107"; 
+                    else light.style.background = "#dc3545"; 
+                    status.innerText = `判定中: あなた=${Math.round(detectedMidi)} / 目標=${targetMidi}\n(音量: ${volume.toFixed(5)})`;
                 } else {
-                    light.style.background = "#007bff"; // 青：声は出てるが再生前
-                    status.innerText = `音程検知中: ${Math.round(detectedMidi)}\n(再生すると判定開始)`;
+                    light.style.background = "#007bff"; // 青
+                    status.innerText = `音程検知: ${Math.round(detectedMidi)}\n音量: ${volume.toFixed(5)}`;
                 }
+            } else {
+                // 音はしてるけど音程が分からない時
+                light.style.background = "#ffff00"; // 黄色（前回の成功状態）
+                status.innerText = `音は聞こえています\nもっとハッキリ歌ってみて！`;
             }
         } else {
             light.style.background = "#ccc";
-            if (Tone.Transport.state === 'started') status.innerText = "もっと声を張って！";
         }
     }
 
     function getTargetMidi() {
         if (!midiData) return null;
         const now = Tone.Transport.seconds;
-        // 1番目のトラックを目標とする（適宜変更可）
         const track = midiData.tracks.find(t => t.notes.length > 0);
         if (track) {
             const note = track.notes.find(n => n.time <= now && (n.time + n.duration) >= now);
@@ -131,7 +133,7 @@
         
         document.getElementById('playBtn').style.display = "inline-block";
         document.getElementById('stopBtn').style.display = "inline-block";
-        document.getElementById('status').innerText = "MIDI準備OK！\n再生して目標音に合わせて歌おう！";
+        document.getElementById('status').innerText = "MIDI準備OK！";
     };
 
     document.getElementById('playBtn').onclick = () => {
