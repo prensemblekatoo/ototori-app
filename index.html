@@ -3,129 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>音取りプレイヤー v3.1</title>
-    <script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.77,npm/@tonejs/midi@2.0.28"></script>
+    <title>音取り出来る君 v1.6 - シンプル3択版</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f4f8; }
-        .card { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); max-width: 450px; margin: auto; }
-        .track-item { display: flex; align-items: center; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
-        .btn-toggle { padding: 8px; border-radius: 5px; border: none; cursor: pointer; font-weight: bold; width: 80px; }
-        .main-mode { background: #ffc107; color: #000; } /* 自分のパート */
-        .sub-mode { background: #e2e3e5; color: #666; }  /* 他のパート */
-        .off-mode { background: #fff; border: 1px dashed #ccc; color: #ccc; }
-        .control { background: #eee; padding: 15px; border-radius: 15px; margin-top: 20px; }
-        .measure { font-size: 32px; font-weight: bold; color: #007bff; margin: 10px; }
-        .action-btn { padding: 15px; width: 45%; border-radius: 10px; border: none; font-size: 18px; font-weight: bold; cursor: pointer; }
+        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f4f8; color: #333; }
+        .card { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
+        .track-list { text-align: left; margin: 15px 0; border: 1px solid #ddd; padding: 10px; border-radius: 10px; }
+        .track-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .track-info { flex: 1; font-weight: bold; }
+        
+        /* 3択ボタンのスタイル */
+        .mode-btn { width: 80px; padding: 8px; font-size: 12px; border-radius: 5px; border: 1px solid #ccc; cursor: pointer; transition: 0.2s; }
+        .mode-main { background: #ffc107; color: #000; font-weight: bold; } /* メイン: 黄色 */
+        .mode-sub { background: #e2e3e5; color: #666; }                /* サブ: 薄グレー */
+        .mode-off { background: #fff; color: #ccc; border-style: dashed; } /* オフ: 白 */
+
+        button.main-action { background: #28a745; color: white; border: none; padding: 12px; border-radius: 10px; font-size: 16px; cursor: pointer; margin: 5px; width: 45%; }
+        .nav-btn { background: #6c757d; color: white; border: none; padding: 8px; border-radius: 5px; width: 45%; cursor: pointer; }
+        .control-panel { background: #e9ecef; padding: 15px; border-radius: 15px; margin-top: 15px; }
+        .loop-settings { display: flex; justify-content: space-around; margin: 10px 0; }
+        .loop-settings input { width: 50px; text-align: center; font-size: 16px; }
+        .counter { font-size: 28px; font-weight: bold; color: #007bff; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>音取りプレイヤー <small>v3.1</small></h2>
-    <p style="font-size: 12px; color: #666;">自分のパートを強調して聴く専用です</p>
-
+    <h2>音取り出来る君 <small>v1.6</small></h2>
+    
     <input type="file" id="fileInput" accept=".mid,.midi" style="display:none">
-    <button onclick="document.getElementById('fileInput').click()" style="background:#007bff; color:white; border:none; padding:12px; width:90%; border-radius:10px;">1. MIDIファイルを読み込む</button>
+    <button onclick="document.getElementById('fileInput').click()" style="background:#007bff; color:white; border:none; padding:10px; width:100%; border-radius:10px;">MIDI読み込み</button>
 
-    <div id="trackList" style="margin: 20px 0; text-align: left;"></div>
+    <div class="track-list" id="trackList">
+        <p style="color:#999; text-align:center;">読み込むとパートが出ます</p>
+    </div>
 
-    <div class="control">
-        <div class="measure" id="measureDisp">1.1</div>
-        <div style="margin-bottom:10px;">
-            開始:<input type="number" id="startM" value="1" style="width:40px;"> 
-            終了:<input type="number" id="endM" value="10" style="width:40px;">
+    <div class="control-panel">
+        <div class="counter" id="measureCounter">1.1</div>
+        <div class="loop-settings">
+            <div>開始:<input type="number" id="startMeasure" value="1"></div>
+            <div>終了:<input type="number" id="endMeasure" value="5"></div>
         </div>
-        <button id="playBtn" class="action-btn" style="background:#28a745; color:white;" disabled>再生</button>
-        <button id="stopBtn" class="action-btn" style="background:#dc3545; color:white;">停止</button>
+        <div style="margin-bottom: 15px;">
+            <button class="nav-btn" onclick="adjustTime(-1)">◀ 1拍戻る</button>
+            <button class="nav-btn" onclick="adjustTime(1)">1拍進む ▶</button>
+        </div>
+        <label>速度: <span id="speedVal">1.0</span>x</label><br>
+        <input type="range" id="speedRange" min="0.5" max="1.5" step="0.1" value="1.0" style="width:90%">
+        <div style="margin-top:15px;">
+            <button id="playBtn" class="main-action" disabled>再生</button>
+            <button id="stopBtn" class="main-action" style="background:#dc3545;">停止</button>
+        </div>
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.77,npm/@tonejs/midi@2.0.28"></script>
+
 <script>
     let midiData = null;
-    let tracks = [];
+    let baseBpm = 120;
+    let tracksInfo = []; // { synth, vol, mode: 'main'|'sub'|'off' }
 
     document.getElementById('fileInput').onchange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
         const arrayBuffer = await file.arrayBuffer();
         midiData = new Midi(arrayBuffer);
+
+        if (midiData.header.tempos.length > 0) {
+            baseBpm = midiData.header.tempos[0].bpm;
+            Tone.Transport.bpm.value = baseBpm;
+        }
+
+        const listDiv = document.getElementById('trackList');
+        listDiv.innerHTML = "";
         
-        const list = document.getElementById('trackList');
-        list.innerHTML = "<strong>パート設定:</strong>";
-        
-        midiData.tracks.forEach((track, i) => {
-            if (track.notes.length === 0) return;
-            
-            // パートごとに音量と左右（パン）を設定
-            const panner = new Tone.Panner(0).toDestination();
-            const vol = new Tone.Volume(0).connect(panner);
+        tracksInfo.forEach(t => { t.synth.dispose(); t.vol.dispose(); });
+        tracksInfo = [];
+
+        midiData.tracks.forEach((track, index) => {
+            if(track.notes.length === 0) return;
+
+            const vol = new Tone.Volume(0).toDestination();
             const synth = new Tone.PolySynth(Tone.Synth).connect(vol);
-            
-            const mode = (i === 0) ? 'main' : 'sub'; // 1つ目を自分、他を伴奏に初期設定
-            tracks[i] = { synth, vol, panner, mode };
-            
+            // 初期状態：Track 1をメイン、他をサブにする
+            const mode = (index === 0) ? 'main' : 'sub';
+            tracksInfo[index] = { synth, vol, mode };
+
             const div = document.createElement('div');
             div.className = 'track-item';
-            div.innerHTML = `<span>パート ${i+1}</span>
-                <button id="btn-${i}" class="btn-toggle ${mode}-mode" onclick="toggle(${i})">${mode.toUpperCase()}</button>`;
-            list.appendChild(div);
-            updateTrack(i);
+            div.innerHTML = `
+                <div class="track-info">Part ${index+1}</div>
+                <button id="btn-${index}" class="mode-btn mode-${mode}" onclick="toggleMode(${index})">
+                    ${mode.toUpperCase()}
+                </button>
+            `;
+            listDiv.appendChild(div);
+            applyVolume(index);
         });
         document.getElementById('playBtn').disabled = false;
     };
 
-    function toggle(i) {
-        const t = tracks[i];
-        if (t.mode === 'main') t.mode = 'sub';
-        else if (t.mode === 'sub') t.mode = 'off';
-        else t.mode = 'main';
+    function toggleMode(idx) {
+        const modes = ['main', 'sub', 'off'];
+        let currentIdx = modes.indexOf(tracksInfo[idx].mode);
+        let nextMode = modes[(currentIdx + 1) % modes.length];
         
-        const btn = document.getElementById(`btn-${i}`);
-        btn.className = `btn-toggle ${t.mode}-mode`;
-        btn.innerText = t.mode.toUpperCase();
-        updateTrack(i);
+        tracksInfo[idx].mode = nextMode;
+        
+        const btn = document.getElementById(`btn-${idx}`);
+        btn.className = `mode-btn mode-${nextMode}`;
+        btn.innerText = nextMode.toUpperCase();
+        
+        applyVolume(idx);
     }
 
-    function updateTrack(i) {
-        const t = tracks[i];
-        if (t.mode === 'main') {
-            t.vol.volume.value = 0;   // 自分の音は大きく
-            t.panner.pan.value = 0.8; // 右から聞こえる
-        } else if (t.mode === 'sub') {
-            t.vol.volume.value = -15; // 伴奏は控えめに
-            t.panner.pan.value = -0.8; // 左から聞こえる
-        } else {
-            t.vol.volume.value = -100; // 消音
-        }
+    function applyVolume(idx) {
+        const mode = tracksInfo[idx].mode;
+        const volNode = tracksInfo[idx].vol.volume;
+        if (mode === 'main') volNode.value = 0;      // 100%
+        if (mode === 'sub')  volNode.value = -15;    // 約20%
+        if (mode === 'off')  volNode.value = -100;   // 0%
     }
 
     document.getElementById('playBtn').onclick = async () => {
         await Tone.start();
+        if (Tone.Transport.state === 'started') return;
         Tone.Transport.cancel();
         
-        const s = parseInt(document.getElementById('startM').value) - 1;
-        const e = parseInt(document.getElementById('endM').value);
+        const startM = Math.max(0, parseInt(document.getElementById('startMeasure').value) - 1);
+        const endM = parseInt(document.getElementById('endMeasure').value);
         
-        midiData.tracks.forEach((track, i) => {
-            if (!tracks[i] || tracks[i].mode === 'off') return;
+        midiData.tracks.forEach((track, idx) => {
+            if (!tracksInfo[idx] || tracksInfo[idx].mode === 'off') return;
             new Tone.Part((time, note) => {
-                tracks[i].synth.triggerAttackRelease(note.name, note.duration, time, note.velocity);
+                tracksInfo[idx].synth.triggerAttackRelease(note.name, note.duration, time, note.velocity);
             }, track.notes).start(0);
         });
-        
+
         Tone.Transport.loop = true;
-        Tone.Transport.loopStart = `${s}:0:0`;
-        Tone.Transport.loopEnd = `${e}:0:0`;
-        Tone.Transport.position = `${s}:0:0`;
+        Tone.Transport.loopStart = `${startM}:0:0`;
+        Tone.Transport.loopEnd = `${endM}:0:0`;
+        Tone.Transport.position = `${startM}:0:0`;
         Tone.Transport.start();
+        document.getElementById('playBtn').innerText = "演奏中";
     };
 
-    document.getElementById('stopBtn').onclick = () => Tone.Transport.stop();
+    document.getElementById('stopBtn').onclick = () => {
+        Tone.Transport.stop();
+        document.getElementById('playBtn').innerText = "再生";
+    };
+
+    function adjustTime(beats) {
+        let now = Tone.Transport.position.split(':');
+        let b = parseInt(now[1]) + beats;
+        if (b < 0) b = 0;
+        Tone.Transport.position = `${now[0]}:${b}:${now[2]}`;
+    }
+
+    document.getElementById('speedRange').oninput = (e) => {
+        const ratio = e.target.value;
+        document.getElementById('speedVal').innerText = ratio;
+        Tone.Transport.bpm.value = baseBpm * ratio;
+    };
 
     setInterval(() => {
         if (Tone.Transport.state === 'started') {
             const p = Tone.Transport.position.split(':');
-            document.getElementById('measureDisp').innerText = `${parseInt(p[0])+1}.${parseInt(p[1])+1}`;
+            document.getElementById('measureCounter').innerText = `${parseInt(p[0])+1}.${parseInt(p[1])+1}`;
         }
     }, 100);
 </script>
