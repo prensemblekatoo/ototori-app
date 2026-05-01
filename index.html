@@ -87,7 +87,7 @@
         const light = document.getElementById('feedback-light');
         const msg = document.getElementById('status-msg');
 
-        if (maxVal > 0.0001) { // 非常に高い感度
+        if (maxVal > 0.000001) { // 非常に高い感度
             const [pitch, clarity] = Pitchy.findPitch(data, Tone.getContext().sampleRate);
 
             if (clarity > 0.5) {
