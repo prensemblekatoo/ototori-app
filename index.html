@@ -111,7 +111,7 @@ function updatePitch() {
         const pitchText = document.getElementById('pitch-name');
 
         // 音量チェック（デバッグ用）
-        if (maxVal > 0) {
+        if (maxVal > 0.0001) {
             // ここでPitchyを使って解析
             const [pitch, clarity] = Pitchy.findPitch(data, Tone.getContext().sampleRate);
 
