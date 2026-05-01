@@ -96,26 +96,26 @@
         }
     }
 
-    function updatePitch() {
+function updatePitch() {
         if (!analyser) return;
 
-        // 再生中でなくてもマイクの反応だけは見れるようにします
         const data = new Float32Array(analyser.fftSize);
         analyser.getFloatTimeDomainData(data);
         
-        // 音が入っているかチェック（最大振幅を計算）
         let maxVal = 0;
         for(let i=0; i<data.length; i++) {
             if(Math.abs(data[i]) > maxVal) maxVal = Math.abs(data[i]);
         }
 
         const light = document.getElementById('feedback-light');
+        const pitchText = document.getElementById('pitch-name');
 
-        // 音量が一定以上ある場合のみ解析
-        if (maxVal > 0.0001) { 
+        // 音量チェック（デバッグ用）
+        if (maxVal > 0) {
+            // ここでPitchyを使って解析
             const [pitch, clarity] = Pitchy.findPitch(data, Tone.getContext().sampleRate);
 
-            if (clarity > 0.7) {
+            if (clarity > 0.5) { // 基準をさらに下げました
                 const detectedMidi = 12 * (Math.log2(pitch / 440)) + 69;
                 const targetMidi = getTargetMidi();
                 
@@ -124,66 +124,18 @@
                     if (diff < 1.0) light.style.background = "#28a745"; // 緑
                     else if (diff < 2.5) light.style.background = "#ffc107"; // 黄
                     else light.style.background = "#dc3545"; // 赤
-                    setDebugMsg(`判定中... (あなたの音: ${Math.round(detectedMidi)} / 目標: ${targetMidi})`);
+                    pitchText.innerText = `判定中: あなた=${Math.round(detectedMidi)} / 目標=${targetMidi}`;
                 } else {
-                    light.style.background = "#007bff"; // 青：声は出てるが目標音（MAIN）がない
-                    setDebugMsg("声は聞こえてるよ！(MAINの音が出ていません)");
+                    light.style.background = "#007bff"; // 青
+                    pitchText.innerText = `声はOK！(MIDI番号: ${Math.round(detectedMidi)}) ですが、今MAINの音符がありません`;
                 }
             } else {
-                setDebugMsg("声をもっとはっきりと...");
                 light.style.background = "#888";
+                pitchText.innerText = `音量はOK (${maxVal.toFixed(4)}) ですが、音程が不明瞭です`;
             }
         } else {
-            // 音が小さすぎる
-            if (Tone.Transport.state === 'started') {
-                setDebugMsg("もっと大きな声で歌って！");
-            } else {
-                setDebugMsg("再生ボタンを押すと判定が始まります");
-            }
             light.style.background = "#ccc";
-        }
-        requestAnimationFrame(updatePitch);
-    }
-
-   function updatePitch() {
-        if (!analyser || Tone.Transport.state !== 'started') {
-            requestAnimationFrame(updatePitch);
-            return;
-        }
-
-        const data = new Float32Array(analyser.fftSize);
-        analyser.getFloatTimeDomainData(data);
-        // clarity（声の明瞭度）の基準を 0.9 -> 0.7 に下げて拾いやすくしました
-        const [pitch, clarity] = Pitchy.findPitch(data, Tone.getContext().sampleRate);
-
-        const light = document.getElementById('feedback-light');
-        const pitchText = document.getElementById('pitch-name');
-
-        if (clarity > 0.7) { 
-            const detectedMidi = 12 * (Math.log2(pitch / 440)) + 69;
-            const targetMidi = getTargetMidi();
-            
-            if (targetMidi) {
-                const diff = Math.abs(detectedMidi - targetMidi);
-                
-                // 判定を大幅に甘くしました
-                if (diff < 1.0) { // 半音くらいのズレまで許容
-                    light.style.background = "#28a745"; // 緑（だいたい合ってる！）
-                } else if (diff < 2.5) { // 1音〜2音くらいのズレ
-                    light.style.background = "#ffc107"; // 黄（ちょっとズレてる）
-                } else {
-                    light.style.background = "#dc3545"; // 赤（迷子）
-                }
-                // 動作確認用に、今拾っている音の数値を表示
-                pitchText.innerText = `あなたの音(MIDI番号): ${Math.round(detectedMidi)}`;
-            } else {
-                light.style.background = "#ccc"; // MAINの音が鳴っていない時
-                pitchText.innerText = "MAINの音を待機中...";
-            }
-        } else {
-            // 声を拾っていない時
-            light.style.background = "#444"; 
-            pitchText.innerText = "声を拾っていません...";
+            pitchText.innerText = "マイクから音が入力されていません";
         }
         requestAnimationFrame(updatePitch);
     }
