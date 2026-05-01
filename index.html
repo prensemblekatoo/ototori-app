@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>音取り出来る君 v2.7</title>
+    <title>音取り出来る君 v2.8 - 完成形</title>
     <style>
         body { font-family: sans-serif; text-align: center; padding: 20px; background: #f0f4f8; }
         .card { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); max-width: 450px; margin: auto; }
         #feedback-light { width: 120px; height: 120px; border-radius: 50%; margin: 20px auto; background: #ccc; border: 5px solid white; box-shadow: 0 0 15px rgba(0,0,0,0.1); transition: 0.1s; }
-        #status { font-size: 16px; font-weight: bold; color: #d63384; min-height: 2em; margin: 15px; }
+        #status { font-size: 14px; font-weight: bold; color: #d63384; min-height: 3em; margin: 15px; white-space: pre-wrap; }
         button { border: none; padding: 15px; border-radius: 10px; font-weight: bold; cursor: pointer; margin: 5px; font-size: 16px; }
         .btn-orange { background: #fd7e14; color: white; width: 90%; }
         .btn-blue { background: #007bff; color: white; width: 90%; margin-top: 10px; }
@@ -17,9 +17,9 @@
 <body>
 
 <div class="card">
-    <h2>音取り出来る君 <small>v2.7</small></h2>
+    <h2>音取り出来る君 <small>v2.8</small></h2>
     <div id="feedback-light"></div>
-    <div id="status">1. まずオレンジのボタンを押してね</div>
+    <div id="status">1. オレンジのボタンを押して開始</div>
     
     <button id="startBtn" class="btn-orange">マイクを有効にする</button>
 
@@ -35,6 +35,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pitchy@4.0.0/dist/bundle-min.js"></script>
 
 <script>
     let audioCtx, analyser, midiData;
@@ -48,12 +49,12 @@
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const source = audioCtx.createMediaStreamSource(stream);
             analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 256; // 軽くするために小さく
+            analyser.fftSize = 2048;
             source.connect(analyser);
 
             document.getElementById('startBtn').style.display = "none";
             document.getElementById('loadBtn').style.display = "block";
-            document.getElementById('status').innerText = "マイク開通！\n声を出して色が「黄色」に変われば成功！";
+            document.getElementById('status').innerText = "マイク開通！\n声を出すと「青色」に変わります";
             
             updateLoop();
         } catch (err) {
@@ -65,26 +66,55 @@
         requestAnimationFrame(updateLoop);
         if (!analyser) return;
 
-        const data = new Uint8Array(analyser.frequencyBinCount);
-        analyser.getByteFrequencyData(data);
+        const data = new Float32Array(analyser.fftSize);
+        analyser.getFloatTimeDomainData(data);
         
-        // 音量の平均を計算
         let sum = 0;
-        for(let i=0; i<data.length; i++) sum += data[i];
-        let average = sum / data.length;
+        for(let i=0; i<data.length; i++) sum += data[i] * data[i];
+        let volume = Math.sqrt(sum / data.length);
 
         const light = document.getElementById('feedback-light');
+        const status = document.getElementById('status');
 
-        // 音量があれば黄色く光らせる（ライブラリ不要の確実な判定）
-        if (average > 20) { 
-            light.style.background = "#ffc107"; // 黄色
-            if (Tone.Transport.state === 'started') {
-                // 再生中なら、なんとなく「合ってる気分」で緑っぽくする（暫定）
-                light.style.background = "#28a745"; 
+        if (volume > 0.01) { // 音を検知
+            const [pitch, clarity] = Pitchy.findPitch(data, audioCtx.sampleRate);
+            
+            if (clarity > 0.5) {
+                const detectedMidi = 12 * (Math.log2(pitch / 440)) + 69;
+                const targetMidi = getTargetMidi();
+                
+                if (targetMidi && Tone.Transport.state === 'started') {
+                    // ここで厳密な判定！
+                    const diff = Math.abs(detectedMidi - targetMidi);
+                    if (diff < 1.0) {
+                        light.style.background = "#28a745"; // 緑：合ってる！
+                    } else if (diff < 2.0) {
+                        light.style.background = "#ffc107"; // 黄：惜しい
+                    } else {
+                        light.style.background = "#dc3545"; // 赤：ズレてる
+                    }
+                    status.innerText = `判定中！\n目標音(MIDI): ${targetMidi} / あなたの音: ${Math.round(detectedMidi)}`;
+                } else {
+                    light.style.background = "#007bff"; // 青：声は出てるが再生前
+                    status.innerText = `音程検知中: ${Math.round(detectedMidi)}\n(再生すると判定開始)`;
+                }
             }
         } else {
             light.style.background = "#ccc";
+            if (Tone.Transport.state === 'started') status.innerText = "もっと声を張って！";
         }
+    }
+
+    function getTargetMidi() {
+        if (!midiData) return null;
+        const now = Tone.Transport.seconds;
+        // 1番目のトラックを目標とする（適宜変更可）
+        const track = midiData.tracks.find(t => t.notes.length > 0);
+        if (track) {
+            const note = track.notes.find(n => n.time <= now && (n.time + n.duration) >= now);
+            return note ? note.midi : null;
+        }
+        return null;
     }
 
     document.getElementById('fileInput').onchange = async (e) => {
@@ -101,7 +131,7 @@
         
         document.getElementById('playBtn').style.display = "inline-block";
         document.getElementById('stopBtn').style.display = "inline-block";
-        document.getElementById('status').innerText = "MIDI読み込み完了！";
+        document.getElementById('status').innerText = "MIDI準備OK！\n再生して目標音に合わせて歌おう！";
     };
 
     document.getElementById('playBtn').onclick = () => {
@@ -114,13 +144,9 @@
             }
         });
         Tone.Transport.start();
-        document.getElementById('status').innerText = "再生中...";
     };
 
-    document.getElementById('stopBtn').onclick = () => {
-        Tone.Transport.stop();
-        document.getElementById('status').innerText = "停止";
-    };
+    document.getElementById('stopBtn').onclick = () => Tone.Transport.stop();
 </script>
 </body>
 </html>
